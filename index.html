@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en-US">
+	<head>
+		<meta charset="utf-8" />
+		<title>Minecraft Spiral Generator</title>
+		<link rel="stylesheet" href="style.css" />
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r79/three.min.js"></script>
+	</head>
+	<body>
+		<div>
+			<h1>Minecraft Spiral Generator</h1>
+			<div class="sliderContainer">
+				<div>
+					Height of the spiral (in blocks)
+					<input
+						type="range"
+						id="blocks_wide"
+						name="blocks_wide"
+						min="0"
+						max="80"
+						step="2"
+					/>
+				</div>
+				<div>
+					Scale of the spiral pattern
+					<input
+						type="range"
+						id="spiral_scale"
+						name="spiral_scale"
+						min="0.1"
+						max="3"
+						step="any"
+					/>
+				</div>
+				<div>
+					How much bigger spiral gets near edges
+					<input
+						type="range"
+						id="radial_scale"
+						name="radial_scale"
+						min="0.01"
+						max="1.0"
+						step="any"
+					/>
+				</div>
+				<div>
+					Thickness of spiral
+					<input
+						type="range"
+						id="fullness"
+						name="fullness"
+						min="0.35"
+						max="0.9"
+						step="any"
+					/>
+				</div>
+				<div>
+					Tip skinnyness
+					<input
+						type="range"
+						id="tip_fullness"
+						name="tip_fullness"
+						min="0"
+						max="0.05"
+						step="any"
+					/>
+				</div>
+			</div>
+			<h2>Generated Spiral</h2>
+		</div>
+		<script id="vertexShader" type="x-shader/x-vertex">
+			// vertex shader's code goes here
+		</script>
+		<script id="fragmentShader" type="x-shader/x-fragment">
+			#define PI2 6.283186
+
+			uniform float fullness;
+			uniform float blocks_wide;
+			uniform float scale;
+			uniform float radial_scale;
+			uniform float tip_fullness;
+			uniform float screenHeight;
+			uniform float screenWidth;
+
+			float dArchSpiral(in vec2 p, float n)
+			{
+			    // normalized angle of point relative to the center
+			    float thetaN = atan(p.x, p.y)/PI2 + .5;
+			    // distance of point from the center
+			    float d = length(p*scale / (radial_scale + (1.0 - radial_scale) * length(p)));
+
+			    // the distance returned varies between 0 and 0.5
+			    // 0.5 chosen arbitrarily to be the max distance from the spiral
+
+			    if (abs(fract(thetaN + n*d)) > 1.0 - fullness + (1.0 / (d + 0.015)) * tip_fullness) {
+			        return 1.0;
+			    }
+
+			    return 0.0;
+			}
+
+			void main()
+			{
+			    vec2 iResolution = vec2(screenWidth,screenHeight);
+			    float gs = blocks_wide / 2.0;
+			    vec2 p = (2.0*gl_FragCoord.xy-iResolution.xy)/iResolution.y;
+
+			    float ps = gs / iResolution.y;
+			    float col_1 = dArchSpiral(floor(p * gs) / gs + ps * 0.25, 2.);
+			    float col_2 = dArchSpiral(floor(p * gs) / gs + ps * 0.75, 2.);
+
+			    vec2 block_number = vec2(floor(p.x * gs),floor(p.y * gs));
+
+			    vec2 sample_3 = vec2(
+			        floor(p.x * gs) / gs + ps * 0.25,
+			        floor(p.y * gs) / gs + ps * 0.75
+			    );
+
+			    vec2 sample_4 = vec2(
+			        floor(p.x * gs) / gs + ps * 0.75,
+			        floor(p.y * gs) / gs + ps * 0.25
+			    );
+
+			    float col_3 = dArchSpiral(sample_3, 2.);
+			    float col_4 = dArchSpiral(floor(p * gs) / gs + ps * 0.75, 2.);
+
+			    if (col_1 + col_2 + col_3 + col_4 > 0.5) {
+			        gl_FragColor = vec4(0.95,0.9,0.8,1.0);
+			    } else {
+			        gl_FragColor = vec4(0.45,0.05,0.15,1.0);
+			    }
+
+			    if (block_number.x + block_number.y - 2.0 * floor((block_number.x + block_number.y) / 2.0) == 0.0) {
+			        gl_FragColor *= vec4(0.5,0.55,0.55,1.0);
+			    }
+			}
+		</script>
+		<script>
+			const SIZE = 500;
+			const renderer = new THREE.WebGLRenderer();
+			document.body.appendChild(renderer.domElement);
+
+			var FULLNESS = 0.7;
+			var TIP_FULLNESS = 0.02;
+			var BLOCKS_WIDE = 30;
+			var SPIRAL_SCALE = 1.0;
+			var RADIAL_SCALE = 1.0;
+
+			const camera = new THREE.OrthographicCamera(
+				SIZE / -2,
+				SIZE / 2,
+				SIZE / 2,
+				SIZE / -2,
+				0.1,
+				1000
+			);
+
+			function render_scene() {
+				const scene = new THREE.Scene();
+				const glsl = (x) => x[0];
+
+				const geometry = new THREE.PlaneGeometry(SIZE, SIZE);
+
+				const material = new THREE.ShaderMaterial({
+					uniforms: {
+						fullness: { value: FULLNESS },
+						tip_fullness: { value: TIP_FULLNESS },
+						blocks_wide: { value: BLOCKS_WIDE },
+						scale: { value: SPIRAL_SCALE },
+						radial_scale: { value: RADIAL_SCALE },
+						screenWidth: { value: SIZE },
+						screenHeight: { value: SIZE },
+					},
+					fragmentShader:
+						document.getElementById("fragmentShader").textContent,
+				});
+				const plane = new THREE.Mesh(geometry, material);
+				scene.add(plane);
+
+				renderer.setSize(SIZE, SIZE);
+				document.body.appendChild(renderer.domElement);
+
+				camera.position.z = 1;
+
+				renderer.render(scene, camera);
+			}
+
+			render_scene();
+
+			const fullness_input = document.querySelector("#fullness");
+			const tip_fullness_input = document.querySelector("#tip_fullness");
+			const blocks_wide_input = document.querySelector("#blocks_wide");
+			const spiral_scale_input = document.querySelector("#spiral_scale");
+			const radial_scale_input = document.querySelector("#radial_scale");
+
+			fullness_input.addEventListener("input", (event) => {
+				FULLNESS = event.target.value;
+				render_scene();
+			});
+			tip_fullness_input.addEventListener("input", (event) => {
+				TIP_FULLNESS = event.target.value;
+				render_scene();
+			});
+			blocks_wide_input.addEventListener("input", (event) => {
+				BLOCKS_WIDE = event.target.value;
+				render_scene();
+			});
+			spiral_scale_input.addEventListener("input", (event) => {
+				SPIRAL_SCALE = event.target.value;
+				render_scene();
+			});
+			radial_scale_input.addEventListener("input", (event) => {
+				RADIAL_SCALE = event.target.value;
+				render_scene();
+			});
+		</script>
+	</body>
+</html>
