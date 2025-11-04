@@ -65,6 +65,17 @@
 						step="0.01"
 					/>
 				</div>
+				<div>
+					Rotation
+					<input
+						type="range"
+						id="rotation"
+						name="rotation"
+						min="0.0"
+						max="6.28318530718"
+						step="0.01"
+					/>
+				</div>
 			</div>
 			<h2>Generated Spiral</h2>
 		</div>
@@ -79,9 +90,10 @@
 			uniform float blocks_wide;
 			uniform float scale;
 			uniform float radial_scale;
+			uniform float rotation;
 			uniform float screenHeight;
 			uniform float screenWidth;
-			uniform float t;
+			uniform float cut;
 
 			float dArchSpiral(in vec2 p, float a, float d)
 			{
@@ -89,7 +101,7 @@
 				float r = length(p);
 
 				a = a + radial_scale * r;
-
+				float t = cut;
 				float nt = t - (PI / 2.0);
 
 				float inv_t = 1.0 / t;
@@ -97,12 +109,17 @@
 
 				float extra_angles = 0.0;
 				if (t < 0.87) {
-					extra_angles = - PI;
+					extra_angles = -PI;
 				}
 
+				vec2 rot_p = vec2(
+					p.x * cos(rotation) + p.y * sin(rotation),
+					p.y * cos(rotation) - p.x * sin(rotation)
+				);
+
 				float bounds = sqrt(
-					pow(p.x + t * a / PI2 * (cos(nt) - cos(atan(m) + extra_angles)), 2.0) +
-					pow(p.y + t * a / PI2 * (sin(nt) - sin(atan(m) + extra_angles)), 2.0)
+					pow(rot_p.x + t * a / PI2 * (cos(nt)- cos(atan(m) + extra_angles)), 2.0) +
+					pow(rot_p.y + t * a / PI2 * (sin(nt)- sin(atan(m) + extra_angles)), 2.0)
 				);
 
 				if (bounds < t * a / PI2) {
@@ -111,8 +128,8 @@
 
 				d *= 3.0 / PI;
 
-				float theta1 = atan(p.x, p.y)/PI2;
-				float theta2 = atan(p.x, p.y)/PI2 - d;
+				float theta1 = atan(rot_p.x, rot_p.y)/PI2;
+				float theta2 = atan(rot_p.x, rot_p.y)/PI2 - d;
 
 				float dist = (abs(fract(theta2 + r / a)) - abs(fract(theta1 + r / a)));
 				if (dist >= 0.000001) {
@@ -147,7 +164,7 @@
 			    float col_3 = dArchSpiral(sample_3, scale, fullness);
 			    float col_4 = dArchSpiral(floor(p * gs) / gs + ps * 0.75, scale, fullness);
 
-			    if (col_1 + col_2 + col_3 + col_4 + col_5 > 0.5) {
+			    if (col_1 + col_2 + col_3 + col_4 + col_5 >= 1.0) {
 			        gl_FragColor = vec4(0.95,0.9,0.8,1.0);
 			    } else {
 			        gl_FragColor = vec4(0.45,0.05,0.15,1.0);
@@ -168,12 +185,14 @@
 			const spiral_scale_input = document.querySelector("#spiral_scale");
 			const radial_scale_input = document.querySelector("#radial_scale");
 			const cut_input = document.querySelector("#cut");
+			const rotation_input = document.querySelector("#rotation");
 
 			var FULLNESS = fullness_input.value;
 			var BLOCKS_WIDE = blocks_wide_input.value;
 			var SPIRAL_SCALE = spiral_scale_input.value;
 			var RADIAL_SCALE = radial_scale_input.value;
 			var CUT = cut_input.value;
+			var ROTATION = rotation_input.value;
 
 			const camera = new THREE.OrthographicCamera(
 				SIZE / -2,
@@ -200,7 +219,8 @@
 						radial_scale: { value: RADIAL_SCALE },
 						screenWidth: { value: SIZE },
 						screenHeight: { value: SIZE },
-						t: { value: CUT },
+						cut: { value: CUT },
+						rotation: { value: ROTATION },
 					},
 					fragmentShader:
 						document.getElementById("fragmentShader").textContent,
@@ -234,8 +254,16 @@
 				RADIAL_SCALE = event.target.value;
 				render_scene();
 			});
+			radial_scale_input.addEventListener("input", (event) => {
+				RADIAL_SCALE = event.target.value;
+				render_scene();
+			});
 			cut_input.addEventListener("input", (event) => {
 				CUT = event.target.value;
+				render_scene();
+			});
+			rotation_input.addEventListener("input", (event) => {
+				ROTATION = event.target.value;
 				render_scene();
 			});
 		</script>
