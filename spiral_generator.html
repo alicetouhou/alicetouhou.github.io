@@ -16,7 +16,7 @@
 						type="range"
 						id="blocks_wide"
 						name="blocks_wide"
-						min="0"
+						min="8"
 						max="80"
 						step="2"
 					/>
@@ -28,7 +28,7 @@
 						id="spiral_scale"
 						name="spiral_scale"
 						min="0.1"
-						max="3"
+						max="2.0"
 						step="any"
 					/>
 				</div>
@@ -39,7 +39,7 @@
 						id="radial_scale"
 						name="radial_scale"
 						min="0.01"
-						max="1.0"
+						max="0.33"
 						step="any"
 					/>
 				</div>
@@ -49,20 +49,20 @@
 						type="range"
 						id="fullness"
 						name="fullness"
-						min="0.35"
-						max="0.9"
-						step="any"
+						min="0.1"
+						max="1.0"
+						step="0.01"
 					/>
 				</div>
 				<div>
-					Tip skinnyness
+					Center Cut
 					<input
 						type="range"
-						id="tip_fullness"
-						name="tip_fullness"
-						min="0"
-						max="0.05"
-						step="any"
+						id="cut"
+						name="cut"
+						min="0.0"
+						max="2.0"
+						step="0.01"
 					/>
 				</div>
 			</div>
@@ -72,31 +72,53 @@
 			// vertex shader's code goes here
 		</script>
 		<script id="fragmentShader" type="x-shader/x-fragment">
+			#define PI 3.141593
 			#define PI2 6.283186
 
 			uniform float fullness;
 			uniform float blocks_wide;
 			uniform float scale;
 			uniform float radial_scale;
-			uniform float tip_fullness;
 			uniform float screenHeight;
 			uniform float screenWidth;
+			uniform float t;
 
-			float dArchSpiral(in vec2 p, float n)
+			float dArchSpiral(in vec2 p, float a, float d)
 			{
-			    // normalized angle of point relative to the center
-			    float thetaN = atan(p.x, p.y)/PI2 + .5;
-			    // distance of point from the center
-			    float d = length(p*scale / (radial_scale + (1.0 - radial_scale) * length(p)));
+				float sp = 1.0;
+				float r = length(p);
 
-			    // the distance returned varies between 0 and 0.5
-			    // 0.5 chosen arbitrarily to be the max distance from the spiral
+				a = a + radial_scale * r;
 
-			    if (abs(fract(thetaN + n*d)) > 1.0 - fullness + (1.0 / (d + 0.015)) * tip_fullness) {
-			        return 1.0;
-			    }
+				float nt = t - (PI / 2.0);
 
-			    return 0.0;
+				float inv_t = 1.0 / t;
+				float m = (inv_t * sin(t) + cos(t)) / (inv_t * cos(t) - sin(t));
+
+				float extra_angles = 0.0;
+				if (t < 0.87) {
+					extra_angles = - PI;
+				}
+
+				float bounds = sqrt(
+					pow(p.x + t * a / PI2 * (cos(nt) - cos(atan(m) + extra_angles)), 2.0) +
+					pow(p.y + t * a / PI2 * (sin(nt) - sin(atan(m) + extra_angles)), 2.0)
+				);
+
+				if (bounds < t * a / PI2) {
+					return 0.0;
+				}
+
+				d *= 3.0 / PI;
+
+				float theta1 = atan(p.x, p.y)/PI2;
+				float theta2 = atan(p.x, p.y)/PI2 - d;
+
+				float dist = (abs(fract(theta2 + r / a)) - abs(fract(theta1 + r / a)));
+				if (dist >= 0.000001) {
+					return 1.0;
+				}
+				return 0.0;
 			}
 
 			void main()
@@ -106,8 +128,9 @@
 			    vec2 p = (2.0*gl_FragCoord.xy-iResolution.xy)/iResolution.y;
 
 			    float ps = gs / iResolution.y;
-			    float col_1 = dArchSpiral(floor(p * gs) / gs + ps * 0.25, 2.);
-			    float col_2 = dArchSpiral(floor(p * gs) / gs + ps * 0.75, 2.);
+			    float col_1 = dArchSpiral(floor(p * gs) / gs + ps * 0.25, scale, fullness);
+			    float col_2 = dArchSpiral(floor(p * gs) / gs + ps * 0.75, scale, fullness);
+				float col_5 = dArchSpiral(floor(p * gs) / gs + ps * 0.5, scale, fullness);
 
 			    vec2 block_number = vec2(floor(p.x * gs),floor(p.y * gs));
 
@@ -121,10 +144,10 @@
 			        floor(p.y * gs) / gs + ps * 0.25
 			    );
 
-			    float col_3 = dArchSpiral(sample_3, 2.);
-			    float col_4 = dArchSpiral(floor(p * gs) / gs + ps * 0.75, 2.);
+			    float col_3 = dArchSpiral(sample_3, scale, fullness);
+			    float col_4 = dArchSpiral(floor(p * gs) / gs + ps * 0.75, scale, fullness);
 
-			    if (col_1 + col_2 + col_3 + col_4 > 0.5) {
+			    if (col_1 + col_2 + col_3 + col_4 + col_5 > 0.5) {
 			        gl_FragColor = vec4(0.95,0.9,0.8,1.0);
 			    } else {
 			        gl_FragColor = vec4(0.45,0.05,0.15,1.0);
@@ -140,11 +163,17 @@
 			const renderer = new THREE.WebGLRenderer();
 			document.body.appendChild(renderer.domElement);
 
-			var FULLNESS = 0.7;
-			var TIP_FULLNESS = 0.02;
-			var BLOCKS_WIDE = 30;
-			var SPIRAL_SCALE = 1.0;
-			var RADIAL_SCALE = 1.0;
+			const fullness_input = document.querySelector("#fullness");
+			const blocks_wide_input = document.querySelector("#blocks_wide");
+			const spiral_scale_input = document.querySelector("#spiral_scale");
+			const radial_scale_input = document.querySelector("#radial_scale");
+			const cut_input = document.querySelector("#cut");
+
+			var FULLNESS = fullness_input.value;
+			var BLOCKS_WIDE = blocks_wide_input.value;
+			var SPIRAL_SCALE = spiral_scale_input.value;
+			var RADIAL_SCALE = radial_scale_input.value;
+			var CUT = cut_input.value;
 
 			const camera = new THREE.OrthographicCamera(
 				SIZE / -2,
@@ -164,12 +193,14 @@
 				const material = new THREE.ShaderMaterial({
 					uniforms: {
 						fullness: { value: FULLNESS },
-						tip_fullness: { value: TIP_FULLNESS },
-						blocks_wide: { value: BLOCKS_WIDE },
-						scale: { value: SPIRAL_SCALE },
+						blocks_wide: {
+							value: BLOCKS_WIDE,
+						},
+						scale: { value: Math.sqrt(SPIRAL_SCALE) },
 						radial_scale: { value: RADIAL_SCALE },
 						screenWidth: { value: SIZE },
 						screenHeight: { value: SIZE },
+						t: { value: CUT },
 					},
 					fragmentShader:
 						document.getElementById("fragmentShader").textContent,
@@ -187,18 +218,8 @@
 
 			render_scene();
 
-			const fullness_input = document.querySelector("#fullness");
-			const tip_fullness_input = document.querySelector("#tip_fullness");
-			const blocks_wide_input = document.querySelector("#blocks_wide");
-			const spiral_scale_input = document.querySelector("#spiral_scale");
-			const radial_scale_input = document.querySelector("#radial_scale");
-
 			fullness_input.addEventListener("input", (event) => {
 				FULLNESS = event.target.value;
-				render_scene();
-			});
-			tip_fullness_input.addEventListener("input", (event) => {
-				TIP_FULLNESS = event.target.value;
 				render_scene();
 			});
 			blocks_wide_input.addEventListener("input", (event) => {
@@ -211,6 +232,10 @@
 			});
 			radial_scale_input.addEventListener("input", (event) => {
 				RADIAL_SCALE = event.target.value;
+				render_scene();
+			});
+			cut_input.addEventListener("input", (event) => {
+				CUT = event.target.value;
 				render_scene();
 			});
 		</script>
