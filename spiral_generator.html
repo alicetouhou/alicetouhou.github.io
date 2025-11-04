@@ -84,10 +84,7 @@
 				</div>
 			</div>
 			<h2>Generated Spiral</h2>
-		</div>
-		<script id="vertexShader" type="x-shader/x-vertex">
-			// vertex shader's code goes here
-		</script>
+			<p>Use right click to pan around. Use mouse wheel to zoom.</p>
 		<script id="fragmentShader" type="x-shader/x-fragment">
 			#define PI 3.141593
 			#define PI2 6.283186
@@ -100,6 +97,8 @@
 			uniform float screenHeight;
 			uniform float screenWidth;
 			uniform float cut;
+			uniform vec2 translate;
+			uniform float zoom;
 
 			float dArchSpiral(in vec2 p, float a, float d)
 			{
@@ -148,7 +147,7 @@
 			{
 			    vec2 iResolution = vec2(screenWidth,screenHeight);
 			    float gs = blocks_wide / 2.0;
-			    vec2 p = (2.0*gl_FragCoord.xy-iResolution.xy)/iResolution.y;
+			    vec2 p = ((2.0*gl_FragCoord.xy-iResolution.xy)/iResolution.y-vec2(translate.x,-translate.y)/300.0)/zoom;
 
 			    float ps = gs / iResolution.y;
 			    float col_1 = dArchSpiral(floor(p * gs) / gs + ps * 0.25, scale, fullness);
@@ -199,6 +198,8 @@
 			var RADIAL_SCALE = radial_scale_input.value;
 			var CUT = cut_input.value;
 			var ROTATION = rotation_input.value;
+			var TRANSLATE = {x: 0, y: 0}
+			var ZOOM = 1;
 
 			const camera = new THREE.OrthographicCamera(
 				SIZE / -2,
@@ -227,6 +228,8 @@
 						screenHeight: { value: SIZE },
 						cut: { value: CUT },
 						rotation: { value: ROTATION },
+						translate: {value: TRANSLATE},
+						zoom: {value: ZOOM}
 					},
 					fragmentShader:
 						document.getElementById("fragmentShader").textContent,
@@ -271,6 +274,52 @@
 			rotation_input.addEventListener("input", (event) => {
 				ROTATION = event.target.value;
 				render_scene();
+			});
+
+			let dragStart = {x: 0, y: 0};
+			let drag = false;
+
+			renderer.domElement.addEventListener("mousedown", function (event) {
+				dragStart = {
+					x: event.pageX - renderer.domElement.offsetLeft,
+					y: event.pageY - renderer.domElement.offsetTop,
+				};
+				drag = true
+
+			});
+
+			addEventListener("mousemove", function (event) {
+				newPos = {
+					x: event.pageX - renderer.domElement.offsetLeft,
+					y: event.pageY - renderer.domElement.offsetTop,
+				};
+				if (drag) {
+					TRANSLATE = {
+						x: TRANSLATE.x - dragStart.x + newPos.x,
+						y: TRANSLATE.y - dragStart.y + newPos.y
+					}
+					dragStart = {
+						x: newPos.x,
+						y: newPos.y
+					}
+				}
+				render_scene();
+			});
+
+			renderer.domElement.addEventListener("wheel", (event) => {
+				event.preventDefault()
+				event.stopPropagation()
+				console.log(event.deltaY)
+				if (event.deltaY < 0 && ZOOM < 2.0) {
+					ZOOM += ZOOM * 0.2;
+				} else if (event.deltaY > 0 && ZOOM > 0.3) {
+					ZOOM -= ZOOM * 0.2;
+				}
+				render_scene();
+			 }, { passive: false })
+
+			addEventListener("mouseup", function (event) {
+				drag = false
 			});
 		</script>
 	</body>
